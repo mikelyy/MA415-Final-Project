@@ -1,0 +1,77 @@
+---
+title: "415 Project"
+author: "Xiao Lu"
+date: "2019/04/04"
+output: github_document
+---
+
+## Data Import & Cleaning
+
+```{r data import}
+library(tidyverse)
+library(stringr)
+reviews<- read_csv("Hotel_Reviews.csv", col_types = cols(Hotel_Address=col_character(), Additional_Number_of_Scoring=col_integer(), Review_Date=col_character(), Average_Score=col_double(), Hotel_Name=col_character(), Reviewer_Nationality=col_character(), Negative_Review=col_character(), Review_Total_Negative_Word_Counts=col_integer(), Total_Number_of_Reviews=col_integer(), Positive_Review=col_character(), Review_Total_Positive_Word_Counts=col_integer(), Total_Number_of_Reviews_Reviewer_Has_Given=col_integer(), Reviewer_Score=col_double(), Tags=col_character(), days_since_review=col_character(), lat=col_double(), lng=col_double()))
+problems(reviews)
+(reviews)
+```
+COMMENT FOR ABOVE CHUNK: Originally, when we define the column type of 'Review_Date' as col_date(), nevertheless, R studio informs us that the actual type of this column is col_character().
+
+```{r finding out outliers or missing value}
+reviews%>% filter(is.na(Reviewer_Score))%>% filter(!is.finite(Reviewer_Score))%>% filter(is.na(Reviewer_Nationality))
+```
+COMMENT FOR ABOVE CHUNK: As can be seen, there is no infinite(invalid) value for 'Reviewer_Score', and no missing value for 'Reviewer_Nationality'
+
+```{r transforming variables}
+reviews_ed1<- reviews %>% mutate(days_since_review=str_extract(temp1_reviews$days_since_review, "^\\d+"))%>% mutate(days_since_review=as.numeric(days_since_review))
+```
+COMMENT FOR ABOVE CHUNK: The column 'days_since_review' arises our attention. As can be seen in the original dataset 'reviews', it's a character variable, consisting of the number of days and word 'days' at the end. Such kind of setting will bring a lot of inconvenience for our future analysis. Thus, we try to use the above chunk to first extract only the number of days in 'days_since_review' and then use 'as.numeric' to transform it into double variable. Finally, we store these changes in a new dataset named 'reviews_ed1'.
+
+```{r finding out top20 sources of tourist}
+(temp_1<- reviews%>% group_by(Reviewer_Nationality)%>% summarize(num_tourist_by_nation=n())%>% arrange(desc(num_tourist_by_nation))%>% head(n=20))
+
+top20_country<- temp_1$Reviewer_Nationality
+```
+COMMENT FOR ABOVE CHUNK: Since country names consist of many words, plotting them in a graph is very messy. Hence, we choose list TOP20 sources of tourists in a table. As is shown, we create a table named 'temp1' showing the Top 20 countries. In addition, the code one line below is creating a vector named 'top20_country', which paves the way for str_detect later.
+
+```{r some basic data visualization}
+reviews_ed1%>% filter(str_detect(Reviewer_Nationality, top20_country))%>% group_by(Reviewer_Nationality)%>% summarize(Top_AvSC=mean(Reviewer_Score))%>% arrange(desc(Top_AvSC))
+
+reviews_ed1%>% group_by(Reviewer_Nationality)%>% summarize(AvSc=mean(Reviewer_Score))%>% arrange(desc(AvSc))%>% head(n=20)  
+
+temp_2<- reviews%>% group_by(Reviewer_Nationality)%>% summarize(num_tourist_by_nation=n())%>% arrange(desc(num_tourist_by_nation))%>% head(n=5)
+top5_country<- temp_2$Reviewer_Nationality
+
+reviews_ed1%>% filter(str_detect(Reviewer_Nationality, top5_country))%>% group_by(Reviewer_Nationality)%>% ggplot(aes(x=reorder(factor(Reviewer_Nationality), Reviewer_Score, FUN=median), y=Reviewer_Score))+ geom_boxplot()
+
+reviews_ed2<- reviews_ed1%>% mutate(Hotel_Country=word(reviews_ed1$Hotel_Address,-1))
+reviews_ed2<- reviews_ed2%>% mutate(Hotel_Country=str_replace(reviews_ed2$Hotel_Country,"Kingdom","UK"))
+```
+COMMENT FOR ABOVE CHUNK: First, we use the vector 'top20_country' 
+```{r}
+library(tidyverse)
+library(sf)
+# run above
+
+eurouk <- st_read("TM_WORLD_BORDERS_SIMPL-0.3.shp")
+hotel <- read.csv("Hotel_Reviews.csv")
+# run above with correct directory address
+
+ggplot(eurouk) + geom_sf() #check that it is europe
+
+euroukEPSG <- eurouk %>%
+  filter(NAME %in% c("Netherlands", "Italy", "United Kingdom", "Spain", "France", "Austria"))
+ggplot(euroukEPSG) + geom_sf()
+# run above
+
+hotel2 <- hotel %>%
+  filter(!(is.na(lng)))
+# run above delete missing variables
+
+hotel3 <- hotel2[1:10000,]
+# delete above for all datasets run
+
+europehotel <- hotel3 %>% st_as_sf(coords=c("lng","lat")) %>% st_set_crs(4326) %>% st_transform(5643)
+ggplot()+geom_sf(aes(color = "yellow"), data=euroukEPSG)+geom_sf(data=europehotel, color = "red", alpha = .5)
+# run above
+```
+

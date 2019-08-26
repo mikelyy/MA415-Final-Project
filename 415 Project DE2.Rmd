@@ -1,0 +1,149 @@
+---
+title: "415 Project"
+author: "Xiao Lu"
+date: "2019/04/04"
+output: pdf_document
+---
+
+## Data Import & Cleaning
+
+```{r data import}
+library(tidyverse)
+library(stringr)
+reviews<- read_csv("Hotel_Reviews.csv", col_types = cols(Hotel_Address=col_character(), Additional_Number_of_Scoring=col_integer(), Review_Date=col_character(), Average_Score=col_double(), Hotel_Name=col_character(), Reviewer_Nationality=col_character(), Negative_Review=col_character(), Review_Total_Negative_Word_Counts=col_integer(), Total_Number_of_Reviews=col_integer(), Positive_Review=col_character(), Review_Total_Positive_Word_Counts=col_integer(), Total_Number_of_Reviews_Reviewer_Has_Given=col_integer(), Reviewer_Score=col_double(), Tags=col_character(), days_since_review=col_character(), lat=col_double(), lng=col_double()))
+problems(reviews)
+(reviews)
+```
+COMMENT FOR ABOVE CHUNK: Originally, when we define the column type of 'Review_Date' as col_date(), nevertheless, R studio informs us that the actual type of this column is col_character().
+
+```{r finding out outliers or missing value}
+reviews%>% filter(is.na(Reviewer_Score))%>% filter(!is.finite(Reviewer_Score))%>% filter(is.na(Reviewer_Nationality))
+```
+COMMENT FOR ABOVE CHUNK: As can be seen, there is no infinite(invalid) value for 'Reviewer_Score', and no missing value for 'Reviewer_Nationality'
+
+```{r transforming variables}
+reviews_ed1<- reviews%>% mutate(days_since_review=str_extract(days_since_review, "^\\d+"))%>% mutate(days_since_review=as.numeric(days_since_review))
+```
+COMMENT FOR ABOVE CHUNK: The column 'days_since_review' arises our attention. As can be seen in the original dataset 'reviews', it's a character variable, consisting of the number of days and word 'days' at the end. Such kind of setting will bring a lot of inconvenience for our future analysis. Thus, we try to use the above chunk to first extract only the number of days in 'days_since_review' and then use 'as.numeric' to transform it into double variable. Finally, we store these changes in a new dataset named 'reviews_ed1'.
+
+```{r finding out top20 sources of tourist}
+(temp_1<- reviews%>% group_by(Reviewer_Nationality)%>% summarize(num_tourist_by_nation=n())%>% arrange(desc(num_tourist_by_nation))%>% head(n=20))
+
+(top20_country<- temp_1$Reviewer_Nationality)
+```
+COMMENT FOR ABOVE CHUNK: Since country names consist of many words, plotting them in a graph is very messy. Hence, we choose list TOP20 sources of tourists in a table. As is shown, we create a table named 'temp1' showing the Top 20 countries. In addition, the code one line below is creating a vector named 'top20_country', which paves the way for str_detect later.
+
+```{r some basic data visualization}
+reviews_ed1%>% filter(str_detect(Reviewer_Nationality, top20_country))%>% group_by(Reviewer_Nationality)%>% summarize(Top_AvSC=mean(Reviewer_Score))%>% arrange(desc(Top_AvSC))
+
+reviews_ed1%>% filter(str_detect(Reviewer_Nationality, top20_country)) %>% group_by(Reviewer_Nationality)%>% summarize(AvSc=mean(Average_Score))%>% arrange(desc(AvSc))%>% head(n=20)  
+
+temp_2<- reviews%>% group_by(Reviewer_Nationality)%>% summarize(num_tourist_by_nation=n())%>% arrange(desc(num_tourist_by_nation))%>% head(n=5)
+top5_country<- temp_2$Reviewer_Nationality
+
+reviews_ed1%>% filter(str_detect(Reviewer_Nationality, top5_country))%>% group_by(Reviewer_Nationality)%>% ggplot(aes(x=reorder(factor(Reviewer_Nationality), Reviewer_Score, FUN=median), y=Reviewer_Score))+ geom_boxplot()
+
+reviews_ed2<- reviews_ed1%>% mutate(Hotel_Country=word(reviews_ed1$Hotel_Address,-1))
+reviews_ed2<- reviews_ed2%>% mutate(Hotel_Country=str_replace(reviews_ed2$Hotel_Country,"Kingdom","UK"))
+```
+COMMENT FOR ABOVE CHUNK: First, we use the vector 'top20_country' created above and use it to find out the average 'Reviewer_Score' for those countries. In order to make sure our statistics is representative, we in particular make another table, without considering the top20_country, for highest average 'Reviewer_Score'. We can find that the countries listed in the second table are some small countries. Therefore, the number of tourists from these countries is very small and less representative.
+In the middle chunk, we find out another problems need to be fixed. The original dataset doesn't give the country the hotels belong to. However, we find that the last word of the 'Hotel_Address' is just the country name for hotels. So, we create a new variable named 'Hotel_Country' to store the country name extracted from 'Hotel_Address' However, we came up with another minor problem: for hotels in United Kingdom, the word we extract is 'Kingdom'. The solution is that we use 'str_replace' to replace 'Kingdom' by 'UK', and we then store this changes in a new dataset named 'reviews_ed2'.
+The botttom chunk is a boxplot for the 'Reviewer_Score' for Top5 sources of tourists countries, order by median value. We find out that US tourists are very kind, because they give both the highest average score and the highest median score.
+
+
+```{r}
+#Percentages for Non-Positive or Non-Negative Reviews for Top 20 tourist countries
+#table display
+reviews %>% filter(str_detect(Reviewer_Nationality, top20_country)) %>% group_by(Reviewer_Nationality) %>% summarize(percentage_nopositive=mean(str_detect(Positive_Review, "No Positive"), na.rm=TRUE), percentage_nonegative=mean(str_detect(Negative_Review, "No Negative"), na.rm = TRUE))
+
+#Geom_line graph
+reviews %>% filter(str_detect(Reviewer_Nationality, top20_country)) %>% group_by(Reviewer_Nationality) %>% summarize(percentage_nopositive=mean(str_detect(Positive_Review, "No Positive"), na.rm=TRUE), percentage_nonegative=mean(str_detect(Negative_Review, "No Negative"), na.rm = TRUE)) %>% gather(percentage_nopositive, percentage_nonegative, key="posneg", value="percentage") %>% ggplot(aes(x=Reviewer_Nationality, y=percentage, group=posneg, color=posneg)) + geom_line()
+
+```
+
+```{r}
+#Scatterplot for the absolute difference between last year and this year average review scores among the Top 20 source-country of tourists.
+
+library(forcats)
+reviews %>% filter(str_detect(Reviewer_Nationality, top20_country)) %>%  group_by(Reviewer_Nationality) %>% mutate(difference_score=mean(abs(Reviewer_Score-Average_Score))) %>%
+ggplot() + geom_point(aes(difference_score, fct_reorder(Reviewer_Nationality, difference_score)))
+
+reviews %>% filter(str_detect(Reviewer_Nationality, top20_country)) %>%  group_by(Reviewer_Nationality) %>% mutate(difference_score=abs(Reviewer_Score-Average_Score)) %>% select(Reviewer_Nationality, Reviewer_Score, Average_Score, difference_score)
+```
+
+```{r}
+#Boxplot of review scores for hotels in 6 countries, ordered by median value
+reviews_ed2 %>% group_by(Hotel_Country) %>% ggplot(aes(x=reorder(factor(Hotel_Country), Reviewer_Score, FUN=median), y=Reviewer_Score))+ geom_boxplot()
+
+#Line graph for the mean review score for Top 20 tourist countries, ordered by the countries of hotels
+reviews_ed2 %>% filter(str_detect(Reviewer_Nationality, top20_country)) %>% group_by(Reviewer_Nationality, Hotel_Country) %>% summarize(average_reviews=mean(Reviewer_Score)) %>% ggplot(aes(x=Reviewer_Nationality, y=average_reviews, group=Hotel_Country, color=Hotel_Country)) + geom_line()
+
+```
+
+```{r}
+#Scatterplot for the mean Total Positive Word Count for Top 20 tourist countries, ordered by the overall median
+library(forcats)
+reviews_ed2 %>% filter(str_detect(Reviewer_Nationality, top20_country)) %>% group_by(Reviewer_Nationality) %>% summarize(average_poscount=mean(Review_Total_Positive_Word_Counts)) %>%ggplot() + geom_point(aes(average_poscount, fct_reorder(Reviewer_Nationality, average_poscount)))
+
+```
+
+```{r text minning}
+NEGATIVE<- reviews_ed2%>% filter(!str_detect(Negative_Review, "No Negative"))%>% select(Negative_Review)
+
+temp_NE_10<- str_replace_all(NEGATIVE$Negative_Review,pattern = "[[:punct:]]", "")%>% head(n=10)#remove extra whitespaces#
+NE_10_list<- str_split(temp_NE_10,boundary("word"))
+NE_10_All_Words<- unlist(NE_10_list)
+unique_words_NE_10 <- unique(NE_10_All_Words)#finding unique words in the splitted and unlistted negative review (10)
+z<-vector("integer", length(unique(NE_10_All_Words)))
+for(i in seq_along(z)){
+  z[i]=sum(NE_10_All_Words==unique_words_NE_10[i])
+}#use vector z to store the occurences of each unique words in negative revie
+top_30_order <- order(z, decreasing = TRUE)[1:30]
+(top_30_words <- unique_words_NE_10[top_30_order])
+```
+
+```{r factorizing countries in regions}
+reviews_ed3<-reviews_ed2%>%filter(str_detect(Reviewer_Nationality, top20_country))
+
+reviews_ed4<- reviews_ed3%>% mutate(Reviewer_Nationality=fct_collapse(reviews_ed3$Reviewer_Nationality,
+NorthWesternEurope=c("United Kingdom","Ireland","Netherlands","Switzerland","Germany"),
+SouthMiddleEurope=c("France","Italy","Belgium","Spain"),
+MiddleEast=c("United Arab Emirates","Saudi Arabia","Israel","Turkey","Kuwait"),
+EasternEurope=c("Romania","Russia"),NorthAmerica=c("United States of America","Canada"),Other=c("Australia","South Africa")))
+
+```
+
+```{r}
+data_for_lm1<- reviews_ed2%>% group_by(Hotel_Name)%>% summarize(negative_ratio=mean(Negative_Review!="No Negative"),score=mean(Average_Score))%>% filter(!is.na(negative_ratio))
+
+lm1<- lm(score~negative_ratio,data=data_for_lm1)
+beta1<- coef(lm1)
+data_for_lm1%>% ggplot(aes(x=negative_ratio,y=score))+geom_point()+geom_abline(intercept=beta1[1],slope=beta1[2],color="red")
+
+data_for_lm1%>% add_residuals(lm1)%>% ggplot(aes(resid))+geom_freqpoly(binwidth=1)
+data_for_lm1%>% add_residuals(lm1)%>% ggplot(aes(x=negative_ratio,y=resid))+geom_ref_line(h=0)+geom_point()
+
+summary(lm(Reviewer_Score~days_since_review,data=reviews_ed2))
+
+reviews_ed5<- reviews_ed2%>% filter(Negative_Review!="No Negative", Positive_Review!="No Positive")%>% mutate(difference=Review_Total_Negative_Word_Counts-Review_Total_Positive_Word_Counts)
+summary(lm(Reviewer_Score~difference,data=reviews_ed5))
+
+reviews_ed6<- reviews_ed5%>% mutate(num_of_reviews=Total_Number_of_Reviews_Reviewer_Has_Given)
+
+summary(lm(Reviewer_Score~num_of_reviews-1,data=reviews_ed6))
+
+tree<-rpart(Reviewer_Score~negative_ratio+days_since_review+difference+Total_Number_of_Reviews_Reviewer_Has_Given, data=reviews_ed2)
+rpart.plot(tree)
+```
+
+```{r}
+NEGATIVE_ed2<- reviews_ed2%>% filter(!str_detect(Negative_Review, "No Negative"))%>% select(Negative_Review,Reviewer_Nationality)
+NEGATIVE_ed2%>% mutate(tidied_negative=str_replace_all(NEGATIVE_ed2$Negative_Review,pattern = "[[:punct:]]", ""))%>% unnest_tokens(output,tidied_negative) %>% count(Reviewer_Nationality,output,sort = TRUE)
+
+stopwords<- paste(stopwords('en'), collapse = '\\b|\\b')
+stopwords<- paste0('\\b', stopwords, '\\b')
+
+str_replace_all(documents, stopwords_regex, '')
+NEGATIVE_ed2%>% mutate(tidied_negative=str_replace_all(NEGATIVE_ed2$Negative_Review,pattern =stopwords, ""))
+```
+
